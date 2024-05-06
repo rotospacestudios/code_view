@@ -4,7 +4,7 @@ from tkinter import ttk, filedialog, messagebox, simpledialog
 from qt_delegates import ListExplorer
 from file_type_explorer import FileTypeExplorer
 from core_editor import CoreEditor
-from file_parser import ParserManager, LuaFileParser, FileParser, CParser,CPlusPlusParser, PythonParser,FileParser
+from file_parser import ParserManager, LuaFileParser, FileParser, CParser,CPlusPlusParser, PythonFileParser,FileParser
 import os
 from file_types_module import file_types
 import atexit
