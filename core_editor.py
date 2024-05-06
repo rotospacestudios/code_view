@@ -3,7 +3,7 @@ from tkinter import ttk, filedialog, messagebox, simpledialog
 import os
 import subprocess
 import traceback
-from file_parser import ParserManager, LuaFileParser, FileParser, CParser,CPlusPlusParser, PythonParser
+from file_parser import ParserManager, LuaFileParser, FileParser, CParser,CPlusPlusParser, PythonFileParser
 import pandas as pd
 import msvcrt
 import atexit
