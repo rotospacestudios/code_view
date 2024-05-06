@@ -54,99 +54,115 @@ class CodeAnalyzer(ast.NodeVisitor):
                         self.visit(item)
             elif isinstance(value, ast.AST):
                 self.visit(value)
-
-
     def visit_AsyncFunctionDef(self, node):
-        self.variable_type = 'af'
+        self.variable_types.append('af')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_ClassDef(self, node):
-        self.variable_type = 'c'
+        self.variable_types.append('c')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_Return(self, node):
-        self.variable_type = 'r'
+        self.variable_types.append('r')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_Delete(self, node):
-        self.variable_type = 'd'
+        self.variable_types.append('d')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_Assign(self, node):
-        self.variable_type = 'a'
+        self.variable_types.append('a')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_AugAssign(self, node):
-        self.variable_type = 'aa'
+        self.variable_types.append('aa')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_AnnAssign(self, node):
-        self.variable_type = 'an'
+        self.variable_types.append('an')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_For(self, node):
-        self.variable_type = 'for'
+        self.variable_types.append('for')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_While(self, node):
-        self.variable_type = 'w'
+        self.variable_types.append('w')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_If(self, node):
-        self.variable_type = 'if'
+        self.variable_types.append('if')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_With(self, node):
-        self.variable_type = 'with'
+        self.variable_types.append('with')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_Raise(self, node):
-        self.variable_type = 'ra'
+        self.variable_types.append('ra')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_Try(self, node):
-        self.variable_type = 't'
+        self.variable_types.append('t')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_Assert(self, node):
-        self.variable_type = 'as'
+        self.variable_types.append('as')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_Import(self, node):
-        self.variable_type = 'im'
+        self.variable_types.append('im')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_ImportFrom(self, node):
-        self.variable_type = 'imf'
+        self.variable_types.append('imf')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_Global(self, node):
-        self.variable_type = 'g'
+        self.variable_types.append('g')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_Nonlocal(self, node):
-        self.variable_type = 'n'
+        self.variable_types.append('n')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_Expr(self, node):
-        self.variable_type = 'e'
+        self.variable_types.append('e')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_Pass(self, node):
-        self.variable_type = 'p'
+        self.variable_types.append('p')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_Break(self, node):
-        self.variable_type = 'b'
+        self.variable_types.append('b')
         self.generic_visit(node)
+        self.stack.pop()
 
     def visit_Continue(self, node):
-        self.variable_type = 'co'
+        self.variable_types.append('co')
         self.generic_visit(node)
-        
-    def visit_AsyncFunctionDef(self, node):
-        self.variable_type = 'af'
-        self.generic_visit(node)
+        self.stack.pop()
 
 
 class Stack:
