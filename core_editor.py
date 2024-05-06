@@ -3,7 +3,7 @@ from tkinter import ttk, filedialog, messagebox, simpledialog
 import os
 import subprocess
 import traceback
-from file_parser import ParserManager, LuaFileParser, FileParser
+from file_parser import ParserManager, LuaFileParser, FileParser, CParser,CPlusPlusParser, PythonParser
 import pandas as pd
 import msvcrt
 import atexit
@@ -53,6 +53,7 @@ def write_to_file(file_path, data):
         msvcrt.locking(file.fileno(), msvcrt.LK_LOCK, 1)
         file.write(data)
         msvcrt.locking(file.fileno(), msvcrt.LK_UNLCK, 1)
+        
 class ChangeManager:
     def __init__(self):
         self.file_changes = {}  # Dictionary to store FileChange objects by file path
@@ -64,6 +65,45 @@ class ChangeManager:
         self.file_changes[file_path].changes[line_number] = change
         
 
+    def rename_variable(self, old_name, new_name, file_paths):
+        for file_path in file_paths:
+            if file_path not in self.file_changes:
+                self.file_changes[file_path] = FileChange(file_path)
+            with open(file_path, 'r') as file:
+                lines = file.readlines()
+            for i, line in enumerate(lines):
+                if old_name in line:
+                    new_line = line.replace(old_name, new_name)
+                    change = Change(i, line, new_line, 'edit')
+                    self.file_changes[file_path].changes[i] = change
+
+    def phantom_resolve(self, file_path):
+        # Check if there are any changes for the given file
+        file_change = self.file_changes.get(file_path)
+        if file_change is None:
+            return None
+
+        # Read the file lines into a dictionary
+        with open(file_path, 'r') as file:
+            lines = {i: line for i, line in enumerate(file.readlines())}
+
+        # Apply the changes to the dictionary
+        for line_number, change in sorted(file_change.changes.items()):
+            if change.change_type == 'delete':
+                lines[line_number] = '\n'  # Replace the content with a newline
+            elif change.change_type == 'insert':
+                lines[line_number] = change.new_content
+            else:  # 'edit'
+                lines[line_number] = change.new_content
+
+        # Return the final record
+        return lines
+    def insert_line(self, line_number, new_line, file_path):
+        if file_path not in self.file_changes:
+            self.file_changes[file_path] = FileChange(file_path)
+        change = Change(line_number, None, new_line, 'insert')
+        self.file_changes[file_path].changes[line_number] = change
+        
     def resolve_changes(self, master):
         skip_dialogs = False
         for file_change in self.file_changes.values():
@@ -177,8 +217,7 @@ class CoreEditor(tk.Frame):
         self.change_manager = ChangeManager()
     
         self.file_paths = {}  # Dictionary to store file paths by item ID
-
-        self.tree_view = ttk.Treeview(self)
+        self.tree_view = ttk.Treeview(self, selectmode='extended')
         self.tree_view.grid(row=0, column=0, sticky='nsew')
         self.tree_view.bind('<<TreeviewSelect>>', self.on_tree_view_clicked)
 
@@ -247,14 +286,11 @@ class CoreEditor(tk.Frame):
                     self.file_paths[item_id] = file_path  # Store the file path in the dictionary
 
     def on_edit_field(self, new_value, column_name):
-        selected_item = self.tree_view.selection()[0]
-        self.tree_view.set(selected_item, column=column_name, value=new_value)
-
-
-        new_value = simpledialog.askstring("Edit Field", f"Before: {field_value}\n\nAfter:", initialvalue=field_value)
-        if new_value is not None:
-            self.tree_view.set(selected_item, column=0, value=new_value)
-
+        # Get all selected items from the tree_view
+        selected_items = self.tree_view.selection()
+        for selected_item in selected_items:
+            # Set the new value for each selected item
+            self.tree_view.set(selected_item, column=column_name, value=new_value)
 
     def on_show_records_clicked(self):
         changes_str = '\n'.join([f'{change.index} {change.file_path} {change.old_content} {change.new_content}' for change in self.change_manager.changes])
@@ -287,18 +323,22 @@ class CoreEditor(tk.Frame):
             
     def on_tree_view_clicked(self, event):
         selected_items = self.tree_view.selection()
-        if len(selected_items) > 0:
+        print(f"Selected items: {selected_items}")  # Print the selected items
+        if len(selected_items) == 1:
             selected_item = selected_items[0]
             file_path = self.file_paths.get(selected_item)  # Retrieve the file path from the dictionary
+            print(f"Selected item: {selected_item}, File path: {file_path}")  # Print the selected item and file path
             if file_path:
-                self.populate_table(file_path)
-            else:
-                # Handle the case when the correct item is selected but not under self.tree_view.selection()
-                # For example, you can manually set the selection to the desired item
-                self.tree_view.selection_set(selected_item)
+                self.change_manager.resolve_changes(file_path)  # Resolve changes for the selected file
+                self.populate_table(file_path)  # Call populate_table when a single item is selected
+        elif len(selected_items) > 1:
+            for selected_item in selected_items:
+                file_path = self.file_paths.get(selected_item)  # Retrieve the file path from the dictionary
+                print(f"Selected item: {selected_item}, File path: {file_path}")  # Print the selected item and file path
+                if file_path:
+                    self.change_manager.resolve_changes(file_path)  # Resolve changes for the selected file
+                    self.populate_table_with_variables(file_path)  # Call populate_table_with_variables when multiple items are selected
         else:
-            # Handle the case when no item is selected
-            # For example, you can display an error message or perform a default action
             print("No item selected in the tree view.")
 
 
@@ -373,27 +413,66 @@ class CoreEditor(tk.Frame):
 
         # Bind the right-click event to the table_widget instead of the tree_view
         self.table_widget.bind("<Button-3>", self.show_context_menu)
+    def populate_table_with_variables(self, file_path):
+        # Clear the table
+        for i in self.table_widget.get_children():
+            self.table_widget.delete(i)
 
-        
+        file_extension = os.path.splitext(file_path)[1]
+        parser = self.parser_manager.get_parser(file_extension, file_path)
+        variables = parser.get_variables(file_path)  # Get the variables from the file
+
+        # Get the phantom record for the file
+        phantom_record = self.change_manager.phantom_resolve(file_path)
+        if phantom_record is not None:
+            for line_number, new_content in phantom_record.items():
+                variables[line_number] = new_content
+
+        for _, variable in variables.iterrows():
+            # Add the variable to the table
+            self.table_widget.insert('', 'end', values=(variable['FileName'], variable['Extension'], variable['Type'], variable['LiteralLine']))
+    
+
+    def populate_table(self, file_path):
+        # Clear the table
+        for i in self.table_widget.get_children():
+            self.table_widget.delete(i)
+
+        file_extension = os.path.splitext(file_path)[1]
+        parser = self.parser_manager.get_parser(file_extension, file_path)
+        parsed_data = parser.parse_file(file_path)  # Get the parser output
+
+        # Get the final record using phantom_resolve
+        final_record = self.change_manager.phantom_resolve(file_path)
+        if final_record is not None:
+            for line_number, new_content in final_record.items():
+                parsed_data[line_number] = new_content
+
+        for _, data in parsed_data.iterrows():
+            # Add the data to the table
+            self.table_widget.insert('', 'end', values=(data['FileName'], data['Extension'], data['Type'], data['LiteralLine']))
+
+
     def show_context_menu(self, event):
         # Get the selected item from the table_widget
         self.selected_item = self.table_widget.selection()[0]
         self.context_menu.post(event.x_root, event.y_root)
 
     def insert_line_above(self):
-        selected_item = self.tree_view.selection()[0]
-        file_path = self.file_paths.get(selected_item)  # Retrieve the file path from the dictionary
-        selected_index = self.tree_view.index(selected_item)
-        new_item_id = self.tree_view.insert('', selected_index, text='New Line')
-        self.file_paths[new_item_id] = file_path  # Store the file path in the dictionary
+        selected_items = self.tree_view.selection()
+        for selected_item in selected_items:
+            file_path = self.file_paths.get(selected_item)  # Retrieve the file path from the dictionary
+            selected_index = self.tree_view.index(selected_item)
+            new_item_id = self.tree_view.insert('', selected_index, text='New Line')
+            self.file_paths[new_item_id] = file_path  # Store the file path in the dictionary
 
     def insert_line_below(self):
-        selected_item = self.tree_view.selection()[0]
-        file_path = self.file_paths.get(selected_item)  # Retrieve the file path from the dictionary
-        selected_index = self.tree_view.index(selected_item)
-        new_item_id = self.tree_view.insert('', selected_index + 1, text='New Line')
-        self.file_paths[new_item_id] = file_path  # Store the file path in the dictionary
-
+        selected_items = self.tree_view.selection()
+        for selected_item in selected_items:
+            file_path = self.file_paths.get(selected_item)  # Retrieve the file path from the dictionary
+            selected_index = self.tree_view.index(selected_item)
+            new_item_id = self.tree_view.insert('', selected_index + 1, text='New Line')
+            self.file_paths[new_item_id] = file_path  # Store the file path in the dictionary
 
     def edit_line(self):
         # Get the selected item from the table_widget
