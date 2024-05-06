@@ -27,21 +27,26 @@ class CodeAnalyzer(ast.NodeVisitor):
     def __init__(self):
         self.variable_types = []
         self.stack = Stack()
-
+        
     def get_line_type(self, line):
         try:
-            tree = ast.parse(textwrap.dedent(line))
-            self.visit(tree)
-            return self.variable_types
+            # Try to parse the line as is
+            tree = ast.parse(line)
+        except IndentationError:
+            try:
+                # If there's an IndentationError, try dedenting the line
+                tree = ast.parse(textwrap.dedent(line))
+            except Exception as e:
+                print(f"Error determining variable type: {e}")
+                return ['unknown']
         except Exception as e:
             print(f"Error determining variable type: {e}")
             return ['unknown']
 
-    def visit_FunctionDef(self, node):
-        self.stack.push('f')
-        self.variable_types.append(f'f (sl {self.stack.get_level()})')
-        self.generic_visit(node)
-        self.stack.pop()
+        # If the line was successfully parsed, visit the nodes in the AST
+        self.visit(tree)
+        return self.variable_types
+
 
     # Add similar visit methods for other node types...
 
@@ -54,121 +59,113 @@ class CodeAnalyzer(ast.NodeVisitor):
                         self.visit(item)
             elif isinstance(value, ast.AST):
                 self.visit(value)
+                
+    def visit_FunctionDef(self, node):
+        self.stack.push('f')
+        self.variable_types.append(f'f (sl {self.stack.get_level()})')
+        self.generic_visit(node)
+        self.stack.pop()
+
     def visit_AsyncFunctionDef(self, node):
-        self.variable_types.append('af')
+        self.stack.push('af')
+        self.variable_types.append(f'af (sl {self.stack.get_level()})')
         self.generic_visit(node)
         self.stack.pop()
 
     def visit_ClassDef(self, node):
-        self.variable_types.append('c')
+        self.stack.push('c')
+        self.variable_types.append(f'c (sl {self.stack.get_level()})')
         self.generic_visit(node)
         self.stack.pop()
 
     def visit_Return(self, node):
-        self.variable_types.append('r')
+        self.variable_types.append(f'r (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_Delete(self, node):
-        self.variable_types.append('d')
+        self.variable_types.append(f'd (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_Assign(self, node):
-        self.variable_types.append('a')
+        self.variable_types.append(f'a (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_AugAssign(self, node):
-        self.variable_types.append('aa')
+        self.variable_types.append(f'aa (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_AnnAssign(self, node):
-        self.variable_types.append('an')
+        self.variable_types.append(f'an (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_For(self, node):
-        self.variable_types.append('for')
+        self.variable_types.append(f'for (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_While(self, node):
-        self.variable_types.append('w')
+        self.variable_types.append(f'w (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_If(self, node):
-        self.variable_types.append('if')
+        self.variable_types.append(f'if (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_With(self, node):
-        self.variable_types.append('with')
+        self.variable_types.append(f'with (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_Raise(self, node):
-        self.variable_types.append('ra')
+        self.variable_types.append(f'ra (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_Try(self, node):
-        self.variable_types.append('t')
+        self.variable_types.append(f't (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_Assert(self, node):
-        self.variable_types.append('as')
+        self.variable_types.append(f'as (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_Import(self, node):
-        self.variable_types.append('im')
+        self.variable_types.append(f'im (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_ImportFrom(self, node):
-        self.variable_types.append('imf')
+        self.variable_types.append(f'imf (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_Global(self, node):
-        self.variable_types.append('g')
+        self.variable_types.append(f'g (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_Nonlocal(self, node):
-        self.variable_types.append('n')
+        self.variable_types.append(f'n (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_Expr(self, node):
-        self.variable_types.append('e')
+        self.variable_types.append(f'e (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_Pass(self, node):
-        self.variable_types.append('p')
+        self.variable_types.append(f'p (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_Break(self, node):
-        self.variable_types.append('b')
+        self.variable_types.append(f'b (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
 
     def visit_Continue(self, node):
-        self.variable_types.append('co')
+        self.variable_types.append(f'co (sl {self.stack.get_level()})')
         self.generic_visit(node)
-        self.stack.pop()
+
 
 
 class Stack:
     def __init__(self):
         self.stack = []
 
+    def clear(self):
+        self.stack = []
     def push(self, variable_type):
         level = self.get_level() + 1
         self.stack.append((variable_type, level))
@@ -190,6 +187,9 @@ class Stack:
             return None
     def is_empty(self):
         return len(self.stack) == 0
+
+    def get_stack(self):
+        return self.stack
     
 
 class PythonParser(FileParser):
@@ -207,44 +207,112 @@ class PythonParser(FileParser):
                 variables.append([f"{os.path.basename(self.file_path)}:{i}", None, None, line])
 
         return pd.DataFrame(variables, columns=['FileName', 'Extension', 'Type', 'LiteralLine'])
+import re
+import os
+import pandas as pd
 
+class PythonFileParser(FileParser):
+    def __init__(self, file_path):
+        super().__init__(file_path)
+
+    def get_variables(self, file_path):
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+
+        variables = []
+        for i, line in enumerate(lines, start=1):
+            if '=' in line:  # Simple condition for variable assignment
+                name = line.split('=')[0].strip()  # Get the variable name
+                variables.append([f"{os.path.basename(self.file_path)}:{i}", None, None, line])
+
+        return pd.DataFrame(variables, columns=['FileName', 'Extension', 'Type', 'LiteralLine'])
+    
     def parse_file(self, file_path):
         with open(file_path, 'r') as file:
             lines = file.readlines()
 
         data = []
-        analyzer = CodeAnalyzer()
-
-        # Get the actual file extension
-        _, extension = os.path.splitext(file_path)
-
+        stack = Stack()
+        prev_indent_level = 0
         for line_number, line in enumerate(lines, start=1):
-            line = line.strip()
+            curr_indent_level = len(line) - len(line.lstrip())
+            if curr_indent_level < prev_indent_level:
+                for _ in range(prev_indent_level - curr_indent_level):
+                    stack.pop()
+            prev_indent_level = curr_indent_level
 
-            # Skip comments
-            if line.startswith('#'):
-                continue
+            variable_type, stack = self.determine_variable_type(line.strip(), stack)
+            data.append([f"{os.path.basename(self.file_path)}:{line_number}", ".py", variable_type, line])
 
-            # Handle multiple statements on a single line
-            statements = line.split(';')
-            for statement in statements:
-                statement = statement.strip()
+        return pd.DataFrame(data, columns=['FileName', 'Extension', 'Type', 'LiteralLine'])
 
-                # Determine the type of the statement
-                variable_types = analyzer.get_line_type(statement)
-                for variable_type in variable_types:
-                    name = f"{os.path.basename(file_path)}:{line_number}"
-                    literal_line = statement.strip()
-                    data.append([name, extension, variable_type, literal_line])
+    def determine_variable_type(self, line, stack):
+        # Check for multiline comments
+        if '"""' in line or "'''" in line:
+            if stack.get_top() == 'multiline comment':
+                stack.pop()  # End of multiline comment
+            else:
+                stack.push('multiline comment')  # Start of multiline comment
+            return f'{stack.get_top()} (sl {stack.get_level()})', stack
 
-        df = pd.DataFrame(data, columns=['FileName', 'Extension', 'Type', 'LiteralLine'])
-        return df
+        # Check for opening and closing brackets
+        open_symbols = ['{', '[']
+        close_symbols = ['}', ']']
+        for symbol in line:
+            if symbol in open_symbols:
+                stack.push(symbol)
+            elif symbol in close_symbols:
+                stack.pop()
+
+        # Check for other Python constructs
+        if re.search(r'^\s*def ', line):
+            stack.push('function')
+        elif re.search(r'^\s*if ', line):
+            stack.push('if')
+        elif re.search(r'^\s*elif ', line):
+            stack.pop()
+            stack.push('elif')
+        elif re.search(r'^\s*else:', line):
+            stack.pop()
+            stack.push('else')
+        elif re.search(r'^\s*for ', line):
+            stack.push('for')
+        elif re.search(r'^\s*while ', line):
+            stack.push('while')
+        elif re.search(r'^\s*class ', line):
+            stack.push('class')
+        elif re.search(r'^\s*from ', line):
+            stack.push('from-import')
+        elif '=' in line:
+            stack.push('assignment')
+        elif line.strip() == '':
+            stack.push('empty')
+        else:
+            # Do not push to the stack for other lines
+            return f'{stack.get_top()} (sl {stack.get_level()})', stack
+
+        return f'{stack.get_top()} (sl {stack.get_level()})', stack
+
+
+
 
 
 class LuaFileParser(FileParser):
     def __init__(self, file_path):
         super().__init__(file_path)
 
+    def get_variables(self, file_path):
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+
+        variables = []
+        for i, line in enumerate(lines, start=1):
+            if '=' in line:  # Simple condition for variable assignment
+                name = line.split('=')[0].strip()  # Get the variable name
+                variables.append([f"{os.path.basename(self.file_path)}:{i}", None, None, line])
+
+        return pd.DataFrame(variables, columns=['FileName', 'Extension', 'Type', 'LiteralLine'])
+    
     def parse_file(self, file_path):
         with open(file_path, 'r') as file:
             lines = file.readlines()
@@ -263,18 +331,6 @@ class LuaFileParser(FileParser):
 
         return pd.DataFrame(data, columns=['FileName', 'Extension', 'Type', 'LiteralLine'])
     
-
-    def get_variables(self, file_path):
-        with open(file_path, 'r') as file:
-            lines = file.readlines()
-
-        variables = []
-        for i, line in enumerate(lines, start=1):
-            if '=' in line:  # Simple condition for variable assignment
-                name = line.split('=')[0].strip()  # Get the variable name
-                variables.append([f"{os.path.basename(self.file_path)}:{i}", None, None, line])
-
-        return pd.DataFrame(variables, columns=['FileName', 'Extension', 'Type', 'LiteralLine'])
 
     def determine_variable_type(self, line, stack):
         if 'function' in line:
@@ -554,7 +610,7 @@ class ParserManager:
             if file_extension == '.lua':
                 self.parsers[file_extension] = LuaFileParser(file_path)
             elif file_extension == '.py':
-                self.parsers[file_extension] = PythonParser(file_path)
+                self.parsers[file_extension] = PythonFileParser(file_path)
             elif file_extension == '.c':
                 self.parsers[file_extension] = CParser(file_path)
             elif file_extension == '.cpp':
