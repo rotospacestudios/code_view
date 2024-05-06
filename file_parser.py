@@ -25,11 +25,36 @@ class FileParser:
 
 class CodeAnalyzer(ast.NodeVisitor):
     def __init__(self):
-        self.variable_type = None
+        self.variable_types = []
+        self.stack = Stack()
+
+    def get_line_type(self, line):
+        try:
+            tree = ast.parse(textwrap.dedent(line))
+            self.visit(tree)
+            return self.variable_types
+        except Exception as e:
+            print(f"Error determining variable type: {e}")
+            return ['unknown']
 
     def visit_FunctionDef(self, node):
-        self.variable_type = 'f'
+        self.stack.push('f')
+        self.variable_types.append(f'f (sl {self.stack.get_level()})')
         self.generic_visit(node)
+        self.stack.pop()
+
+    # Add similar visit methods for other node types...
+
+    def generic_visit(self, node):
+        """Called if no explicit visitor function exists for a node."""
+        for _, value in ast.iter_fields(node):
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, ast.AST):
+                        self.visit(item)
+            elif isinstance(value, ast.AST):
+                self.visit(value)
+
 
     def visit_AsyncFunctionDef(self, node):
         self.variable_type = 'af'
@@ -118,6 +143,10 @@ class CodeAnalyzer(ast.NodeVisitor):
     def visit_Continue(self, node):
         self.variable_type = 'co'
         self.generic_visit(node)
+        
+    def visit_AsyncFunctionDef(self, node):
+        self.variable_type = 'af'
+        self.generic_visit(node)
 
 
 class Stack:
@@ -150,50 +179,50 @@ class Stack:
 class PythonParser(FileParser):
     def __init__(self, file_path):
         super().__init__(file_path)
+        
+    def get_variables(self, file_path):
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+
+        variables = []
+        for i, line in enumerate(lines, start=1):
+            if '=' in line:  # Simple condition for variable assignment
+                name = line.split('=')[0].strip()  # Get the variable name
+                variables.append([f"{os.path.basename(self.file_path)}:{i}", None, None, line])
+
+        return pd.DataFrame(variables, columns=['FileName', 'Extension', 'Type', 'LiteralLine'])
 
     def parse_file(self, file_path):
         with open(file_path, 'r') as file:
             lines = file.readlines()
 
         data = []
-        stack = Stack()
         analyzer = CodeAnalyzer()
 
+        # Get the actual file extension
+        _, extension = os.path.splitext(file_path)
+
         for line_number, line in enumerate(lines, start=1):
-            if not line.strip() or line.strip().startswith('#'):
+            line = line.strip()
+
+            # Skip comments
+            if line.startswith('#'):
                 continue
 
-            if '"""' in line or "'''" in line:
-                continue  # Skip multiline strings
+            # Handle multiple statements on a single line
+            statements = line.split(';')
+            for statement in statements:
+                statement = statement.strip()
 
-            try:
-                tree = ast.parse(textwrap.dedent(line))
-                analyzer.visit(tree)
-                variable_type = analyzer.variable_type
-            except Exception as e:
-                print(f"Error determining variable type: {e}")
-                variable_type = 'unknown'
+                # Determine the type of the statement
+                variable_types = analyzer.get_line_type(statement)
+                for variable_type in variable_types:
+                    name = f"{os.path.basename(file_path)}:{line_number}"
+                    literal_line = statement.strip()
+                    data.append([name, extension, variable_type, literal_line])
 
-
-            if variable_type == 'variable':
-                variable_type = f'var(cs, {stack.get_level()})'
-            else:
-                variable_type = f'cs({variable_type}, {stack.get_level()})'
-
-            name = f"{os.path.basename(self.file_path)}:{line_number}"
-            data.append([name, ".py", variable_type, line])
-
-            open_parentheses = line.count('(')
-            close_parentheses = line.count(')')
-
-            for _ in range(open_parentheses):
-                stack.push(variable_type)
-
-            for _ in range(close_parentheses):
-                if not stack.is_empty():
-                    stack.pop()
-
-        return pd.DataFrame(data, columns=['FileName', 'Extension', 'Type', 'LiteralLine'])
+        df = pd.DataFrame(data, columns=['FileName', 'Extension', 'Type', 'LiteralLine'])
+        return df
 
 
 class LuaFileParser(FileParser):
@@ -217,6 +246,19 @@ class LuaFileParser(FileParser):
                     data.append([name, ".lua", variable_type, line])
 
         return pd.DataFrame(data, columns=['FileName', 'Extension', 'Type', 'LiteralLine'])
+    
+
+    def get_variables(self, file_path):
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+
+        variables = []
+        for i, line in enumerate(lines, start=1):
+            if '=' in line:  # Simple condition for variable assignment
+                name = line.split('=')[0].strip()  # Get the variable name
+                variables.append([f"{os.path.basename(self.file_path)}:{i}", None, None, line])
+
+        return pd.DataFrame(variables, columns=['FileName', 'Extension', 'Type', 'LiteralLine'])
 
     def determine_variable_type(self, line, stack):
         if 'function' in line:
@@ -255,9 +297,232 @@ class LuaFileParser(FileParser):
             stack.push('parenthesis')
         elif ')' in line:
             stack.pop()
+            return None, stack
 
         return None, stack
 
+        return None, stack
+    
+class CParser(FileParser):
+    def __init__(self, file_path):
+        super().__init__(file_path)
+        
+    def get_variables(self, file_path):
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+
+        variables = []
+        in_multiline_assignment = False
+        variable_name = None
+        for i, line in enumerate(lines, start=1):
+            if '=' in line and ';' in line:  # Simple condition for variable assignment
+                name = line.split('=')[0].strip()  # Get the variable name
+                variables.append([f"{os.path.basename(self.file_path)}:{i}", None, None, line])
+            elif '=' in line:  # Start of a multiline variable assignment
+                in_multiline_assignment = True
+                variable_name = line.split('=')[0].strip()  # Get the variable name
+            elif in_multiline_assignment and ';' in line:  # End of a multiline variable assignment
+                in_multiline_assignment = False
+                variables.append([f"{os.path.basename(self.file_path)}:{i}", None, None, variable_name + line])
+
+        return pd.DataFrame(variables, columns=['FileName', 'Extension', 'Type', 'LiteralLine'])
+
+    def parse_file(self, file_path):
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+
+        data = []
+        stack = Stack()
+
+        # Get the actual file extension
+        _, extension = os.path.splitext(file_path)
+
+        in_multiline_statement = False
+        for line_number, line in enumerate(lines, start=1):
+            line = line.strip()
+
+            # Determine the type of the line
+            if ';' in line and '=' not in line:
+                line_type = f"declaration({stack.get_level()})"
+            elif '{' in line:
+                stack.push('{')
+                line_type = f"block_start({stack.get_level()})"
+            elif '}' in line:
+                stack.pop()
+                line_type = f"block_end({stack.get_level()})"
+            elif '=' in line and ';' in line:  # Simple condition for variable assignment
+                line_type = f"assignment({stack.get_level()})"
+            elif '=' in line:  # Start of a multiline variable assignment
+                in_multiline_statement = True
+                line_type = f"multiline_assignment_start({stack.get_level()})"
+            elif in_multiline_statement and ';' in line:  # End of a multiline variable assignment
+                in_multiline_statement = False
+                line_type = f"multiline_assignment_end({stack.get_level()})"
+            elif in_multiline_statement:  # Middle of a multiline variable assignment
+                line_type = f"multiline_assignment({stack.get_level()})"
+            else:
+                line_type = f"unknown({stack.get_level()})"
+
+            # Append the filename, extension, type, and literal line to the data list
+            data.append([f"{os.path.basename(file_path)}:{line_number}", extension, line_type, line])
+
+        return pd.DataFrame(data, columns=['FileName', 'Extension', 'Type', 'LiteralLine'])
+
+
+
+    
+class CPlusPlusParser(FileParser):
+    def __init__(self, file_path):
+        super().__init__(file_path)
+        
+    def get_variables(self, file_path):
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+
+        variables = []
+        in_multiline_assignment = False
+        variable_name = None
+        for i, line in enumerate(lines, start=1):
+            if '=' in line and ';' in line:  # Simple condition for variable assignment
+                name = line.split('=')[0].strip()  # Get the variable name
+                variables.append([f"{os.path.basename(self.file_path)}:{i}", None, None, line])
+            elif '=' in line:  # Start of a multiline variable assignment
+                in_multiline_assignment = True
+                variable_name = line.split('=')[0].strip()  # Get the variable name
+            elif in_multiline_assignment and ';' in line:  # End of a multiline variable assignment
+                in_multiline_assignment = False
+                variables.append([f"{os.path.basename(self.file_path)}:{i}", None, None, variable_name + line])
+
+        return pd.DataFrame(variables, columns=['FileName', 'Extension', 'Type', 'LiteralLine'])
+
+
+    def parse_file(self, file_path):
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+
+        data = []
+        stack = Stack()
+
+        # Get the actual file extension
+        _, extension = os.path.splitext(file_path)
+
+        in_multiline_statement = False
+        for line_number, line in enumerate(lines, start=1):
+            line = line.strip()
+
+            # Determine the type of the line
+            if ';' in line and '=' not in line:
+                line_type = f"declaration({stack.get_level()})"
+            elif '{' in line:
+                stack.push('{')
+                line_type = f"block_start({stack.get_level()})"
+            elif '}' in line:
+                stack.pop()
+                line_type = f"block_end({stack.get_level()})"
+            elif '=' in line and ';' in line:  # Simple condition for variable assignment
+                line_type = f"assignment({stack.get_level()})"
+            elif '=' in line:  # Start of a multiline variable assignment
+                in_multiline_statement = True
+                line_type = f"multiline_assignment_start({stack.get_level()})"
+            elif in_multiline_statement and ';' in line:  # End of a multiline variable assignment
+                in_multiline_statement = False
+                line_type = f"multiline_assignment_end({stack.get_level()})"
+            elif in_multiline_statement:  # Middle of a multiline variable assignment
+                line_type = f"multiline_assignment({stack.get_level()})"
+            else:
+                line_type = f"unknown({stack.get_level()})"
+
+            # Append the filename, extension, type, and literal line to the data list
+            data.append([f"{os.path.basename(file_path)}:{line_number}", extension, line_type, line])
+
+        return pd.DataFrame(data, columns=['FileName', 'Extension', 'Type', 'LiteralLine'])
+
+
+
+
+class PascalParser(FileParser):
+    def __init__(self, file_path):
+        super().__init__(file_path)
+        
+    def get_variables(self, file_path):
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+
+        variables = []
+        in_multiline_assignment = False
+        variable_name = None
+        for i, line in enumerate(lines, start=1):
+            if ':=' in line and ';' in line:  # Simple condition for variable assignment
+                name = line.split(':=')[0].strip()  # Get the variable name
+                variables.append([f"{os.path.basename(self.file_path)}:{i}", None, None, line])
+            elif ':=' in line:  # Start of a multiline variable assignment
+                in_multiline_assignment = True
+                variable_name = line.split(':=')[0].strip()  # Get the variable name
+            elif in_multiline_assignment and ';' in line:  # End of a multiline variable assignment
+                in_multiline_assignment = False
+                variables.append([f"{os.path.basename(self.file_path)}:{i}", None, None, variable_name + line])
+
+        return pd.DataFrame(variables, columns=['FileName', 'Extension', 'Type', 'LiteralLine'])
+
+    
+    def parse_file(self, file_path):
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+
+        data = []
+        stack = Stack()
+        in_comment = False
+        in_string = False
+        in_multiline_statement = False
+
+        # Get the actual file extension
+        _, extension = os.path.splitext(file_path)
+
+        for line_number, line in enumerate(lines, start=1):
+            line = line.strip()
+
+            # Handle multiline comments
+            if '{' in line:
+                in_comment = True
+            if '}' in line:
+                in_comment = False
+                continue  # Skip multiline comments
+
+            if in_comment:
+                continue
+
+            # Handle strings
+            if "'" in line:
+                in_string = not in_string
+            if in_string:
+                continue  # Skip strings
+
+            # Determine the type of the line
+            if 'var' in line or ':' in line:
+                line_type = f"declaration({stack.get_level()})"
+            elif 'begin' in line:
+                stack.push('begin')
+                line_type = f"block_start({stack.get_level()})"
+            elif 'end' in line:
+                stack.pop()
+                line_type = f"block_end({stack.get_level()})"
+            elif ':=' in line and ';' in line:  # Simple condition for variable assignment
+                line_type = f"assignment({stack.get_level()})"
+            elif ':=' in line:  # Start of a multiline variable assignment
+                in_multiline_statement = True
+                line_type = f"multiline_assignment_start({stack.get_level()})"
+            elif in_multiline_statement and ';' in line:  # End of a multiline variable assignment
+                in_multiline_statement = False
+                line_type = f"multiline_assignment_end({stack.get_level()})"
+            elif in_multiline_statement:  # Middle of a multiline variable assignment
+                line_type = f"multiline_assignment({stack.get_level()})"
+            else:
+                line_type = f"unknown({stack.get_level()})"
+
+            # Append the filename, extension, type, and literal line to the data list
+            data.append([f"{os.path.basename(file_path)}:{line_number}", extension, line_type, line])
+
+        return pd.DataFrame(data, columns=['FileName', 'Extension', 'Type', 'LiteralLine'])
 
 
 
@@ -274,6 +539,12 @@ class ParserManager:
                 self.parsers[file_extension] = LuaFileParser(file_path)
             elif file_extension == '.py':
                 self.parsers[file_extension] = PythonParser(file_path)
+            elif file_extension == '.c':
+                self.parsers[file_extension] = CParser(file_path)
+            elif file_extension == '.cpp':
+                self.parsers[file_extension] = CPlusPlusParser(file_path)
+            elif file_extension == '.pas':
+                self.parsers[file_extension] = PascalParser(file_path)
             else:
                 self.parsers[file_extension] = FileParser(file_path)
             return self.parsers[file_extension]
