@@ -28,3 +28,9 @@ The parsers support a subset of Pascal, Python, Lua, C++ and C languages. They c
 - Handles basic Pascal syntax: variable assignments, function definitions, control flow statements.
 - Supports literals and array, record constructors.
 - Limitations: Does not support pointers, sets, or complex data structures.
+
+## CPlusPlusParser
+
+- Handles basic C++ syntax: variable assignments, function definitions, control flow statements.
+- Supports literals and array, struct constructors.
+- Limitations: Does not support templates, exceptions, or complex data structures.
